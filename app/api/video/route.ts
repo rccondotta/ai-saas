@@ -1,38 +1,26 @@
 import { auth } from "@clerk/nextjs";
 import { NextResponse } from "next/server";
-import { OpenAI } from "openai";
+import Replicate from "replicate";
 
 import { increaseApiLimit, checkApiLimit } from "@/lib/api-limit";
 import { checkSubscription } from "@/lib/subscription";
 
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+const replicate = new Replicate({
+  auth: process.env.REPLICATE_API_TOKEN!,
 });
 
 export async function POST(req: Request) {
   try {
     const { userId } = auth();
     const body = await req.json();
-    const { prompt, amount = 1, resolution = "512x512" } = body;
+    const { prompt } = body;
 
     if (!userId) {
       return new NextResponse("Unauthorized", { status: 401 });
     }
 
-    if (!openai) {
-      return new NextResponse("OpenAI API Key not configured", { status: 500 });
-    }
-
     if (!prompt) {
       return new NextResponse("Prompt is required", { status: 400 });
-    }
-
-    if (!amount) {
-      return new NextResponse("Amount is required", { status: 400 });
-    }
-
-    if (!resolution) {
-      return new NextResponse("Resolution is required", { status: 400 });
     }
 
     const freeTrial = await checkApiLimit();
@@ -42,19 +30,22 @@ export async function POST(req: Request) {
       return new NextResponse("Free trial has expired.", { status: 403 });
     }
 
-    const response = await openai.images.generate({
-      prompt: prompt,
-      n: parseInt(amount, 10),
-      size: resolution,
-    });
+    const response = await replicate.run(
+      "anotherjesse/zeroscope-v2-xl:9f747673945c62801b13b84701c783929c0ee784e4748ec062204894dda1a351",
+      {
+        input: {
+          prompt,
+        },
+      }
+    );
 
     if (!isPro) {
       await increaseApiLimit();
     }
 
-    return NextResponse.json(response.data);
+    return NextResponse.json(response);
   } catch (error) {
-    console.log("[IMAGE_ERROR]", error);
+    console.log("[VIDEO_ERROR]", error);
     return new NextResponse("Internal Error", { status: 500 });
   }
 }
